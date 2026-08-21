@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Credential Forge — JSON → Cloudflare Secrets</title>
+<style>
+:root{
+    --bg:#171614;
+    --paper:#f5f1e8;
+    --paper-2:#fbf9f4;
+    --ink:#26231e;
+    --muted:#766e61;
+    --muted-soft:#a89d8a;
+    --line:#d8cfbf;
+    --line-soft:#e7e0d3;
+    --accent:#496f64;
+    --accent-2:#36584f;
+    --accent-tint:rgba(73,111,100,.08);
+    --accent-tint-strong:rgba(73,111,100,.16);
+    --gold:#b99a67;
+    --danger:#a64436;
+    --danger-tint:rgba(166,68,54,.08);
+    --success:#3d7654;
+    --success-tint:rgba(61,118,84,.10);
+    --r-lg:16px;
+    --r-md:11px;
+    --r-sm:8px;
+    --ease:cubic-bezier(.4,0,.2,1);
+    --font-display:Georgia,"Times New Roman",serif;
+    --font-body:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --font-mono:"SF Mono",ui-monospace,"Cascadia Code",Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+    margin:0;
+    min-height:100vh;
+    background:var(--paper-2);
+    color:var(--ink);
+    font-family:var(--font-body);
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+}
+button,input{font-family:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+input[type=file]{display:none}
+
+/* ---- top bar ---- */
+.forge-bar{position:sticky;top:0;z-index:20;background:var(--bg);border-bottom:1px solid rgba(255,255,255,.08)}
+.forge-bar-inner{width:min(920px,calc(100% - 40px));margin:0 auto;padding:14px 0;display:flex;align-items:center;justify-content:space-between;gap:20px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.brand-mark{flex:0 0 auto;width:30px;height:30px;display:grid;place-items:center;border:1px solid rgba(255,255,255,.22);border-radius:9px;font:600 12px var(--font-display);color:var(--gold);letter-spacing:.02em}
+.brand-text{display:flex;flex-direction:column;min-width:0}
+.brand-name{font:600 15px/1.1 var(--font-display);color:#f7f2e8;letter-spacing:.01em}
+.brand-tag{margin-top:3px;font-size:11px;color:#9d927e;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.forge-bar-actions{display:flex;align-items:center;gap:14px}
+
+.segmented{position:relative;display:inline-flex;padding:3px;border-radius:999px;background:rgba(255,255,255,.08)}
+.segmented-indicator{position:absolute;top:3px;bottom:3px;left:0;border-radius:999px;background:var(--paper-2);transition:transform .3s var(--ease),width .3s var(--ease);z-index:0}
+.seg-btn{position:relative;z-index:1;border:0;background:transparent;padding:7px 16px;border-radius:999px;font:600 12px var(--font-body);color:#cfc6b6;cursor:pointer;transition:color .2s var(--ease)}
+.seg-btn.active{color:var(--ink)}
+.seg-btn:hover:not(.active){color:#f0ebdf}
+
+.reset-btn{border:0;background:transparent;color:#a99e8a;font:600 11px var(--font-body);cursor:pointer;padding:6px 10px;border-radius:999px;transition:color .16s var(--ease),background .16s var(--ease)}
+.reset-btn:hover{color:#f5b7a8;background:rgba(255,255,255,.07)}
+
+/* ---- page ---- */
+.stage{width:min(760px,calc(100% - 40px));margin:0 auto;padding:44px 0 90px}
+section[hidden]{display:none}
+
+.panel-head{margin-bottom:26px}
+.panel-head-row{display:flex;justify-content:space-between;align-items:flex-end;gap:18px;flex-wrap:wrap}
+.panel-title{margin:0;font:600 26px/1.2 var(--font-display);letter-spacing:-.01em}
+.panel-sub{margin:9px 0 0;color:var(--muted);font-size:13.5px;line-height:1.6;max-width:580px}
+
+/* ---- dropzone + file pills ---- */
+.dropzone{display:block;padding:26px 20px;border:1px dashed #c6bba7;border-radius:var(--r-lg);background:rgba(255,255,255,.5);text-align:center;cursor:pointer;transition:border-color .16s var(--ease),background .16s var(--ease)}
+.dropzone:hover,.dropzone.dragover{border-color:var(--accent);background:var(--accent-tint)}
+.dropzone-title{display:block;font-size:14px;font-weight:700}
+.dropzone-sub{display:block;margin-top:5px;color:var(--muted);font-size:12px}
+
+.file-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px}
+.file-pill{flex:1 1 190px;display:flex;align-items:center;gap:10px;padding:11px 13px;border:1px solid var(--line);border-radius:var(--r-md);background:#fff;transition:border-color .16s var(--ease)}
+.file-pill .dot{flex:0 0 auto;width:7px;height:7px;border-radius:50%;background:#cfc4b1}
+.file-pill.is-ok{border-color:#bcd0c8}
+.file-pill.is-ok .dot{background:var(--success)}
+.file-pill.is-bad{border-color:#e3b7ac}
+.file-pill.is-bad .dot{background:var(--danger)}
+.file-pill-body{min-width:0}
+.file-pill-role{display:block;font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+.file-pill-name{display:block;margin-top:2px;font-size:12px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.file-pill-note{display:block;margin-top:1px;font-size:11px;color:var(--muted)}
+.file-pill.is-bad .file-pill-note{color:var(--danger)}
+
+.status{margin:14px 2px 0;min-height:16px;font-size:12.5px;color:var(--muted)}
+.status.good{color:var(--success)}
+.status.bad{color:var(--danger)}
+
+/* ---- ledger / credential pairs (signature component) ---- */
+.ledger{margin-top:30px;display:grid;gap:24px}
+.ledger-group{padding-top:18px;border-top:1px solid var(--line-soft)}
+.ledger-group:first-child{padding-top:0;border-top:0}
+.ledger-group-head{display:flex;align-items:baseline;justify-content:space-between;gap:14px;margin-bottom:12px}
+.ledger-group-title{margin:0;font:600 13px var(--font-body);letter-spacing:.01em}
+.ledger-group-file{font-size:11px;color:var(--muted-soft);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:280px}
+
+.cred-block+.cred-block{margin-top:14px}
+.cred-pair{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.cred-value-wrap{display:flex;flex-direction:column;gap:6px;min-width:0}
+
+.chip{display:flex;align-items:center;gap:10px;width:100%;text-align:left;border:1px solid var(--line);border-radius:var(--r-sm);background:#fff;padding:10px 12px;cursor:pointer;transition:border-color .15s var(--ease),background .15s var(--ease)}
+.chip:hover{border-color:var(--accent);background:var(--accent-tint)}
+.chip.copied{border-color:var(--success);background:var(--success-tint)}
+.chip-main{min-width:0;flex:1}
+.chip-label{display:block;font-size:9.5px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--muted-soft);margin-bottom:3px}
+.chip-text{display:block;font-family:var(--font-mono);font-size:12px;line-height:1.5;color:var(--ink);overflow-wrap:anywhere}
+.chip-text.is-masked{font-family:var(--font-body);font-style:italic;color:var(--muted)}
+.chip-text.is-pem{white-space:pre-wrap;max-height:180px;overflow:auto}
+.chip-icon{flex:0 0 auto;font-size:10.5px;font-weight:700;letter-spacing:.03em;color:var(--muted-soft)}
+.chip.copied .chip-icon{color:var(--success)}
+
+.reveal-toggle{align-self:flex-start;border:0;background:transparent;color:var(--accent-2);font:600 11px var(--font-body);cursor:pointer;padding:1px 0;text-decoration:underline;text-underline-offset:3px}
+.reveal-toggle:hover{color:var(--accent)}
+
+.cred-caption{margin-top:7px;font-size:10.5px;color:var(--muted-soft)}
+.cred-caption code{background:var(--line-soft);padding:1px 5px;border-radius:4px;color:var(--muted);font-family:var(--font-mono)}
+
+.empty{padding:22px 4px;color:var(--muted);font-size:13px;text-align:center}
+
+/* ---- custom mode ---- */
+.custom-list{display:grid;gap:16px}
+.custom-card{border:1px solid var(--line);border-radius:var(--r-lg);background:#fff;overflow:hidden}
+.custom-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 15px;background:var(--paper-2);border-bottom:1px solid var(--line-soft)}
+.custom-number{display:flex;align-items:center;gap:9px;font:600 12.5px var(--font-body)}
+.custom-pill{width:20px;height:20px;display:grid;place-items:center;border-radius:6px;background:var(--accent-tint-strong);color:var(--accent-2);font-size:10px;font-weight:700}
+.custom-body{padding:16px;display:grid;gap:14px}
+
+.field{display:grid;gap:6px}
+.field label{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--muted)}
+.field-help{font-size:11px;color:var(--muted-soft)}
+.field-help.is-bad{color:var(--danger)}
+
+.text-input{height:38px;padding:0 11px;border:1px solid var(--line);border-radius:var(--r-sm);outline:none;background:var(--paper-2);color:var(--ink);font:600 12px var(--font-mono);transition:border-color .15s var(--ease),background .15s var(--ease),box-shadow .15s var(--ease)}
+.text-input::placeholder{color:var(--muted-soft);font-weight:500}
+.text-input:focus{border-color:var(--accent);background:#fff;box-shadow:0 0 0 3px var(--accent-tint)}
+
+.file-pick{display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.file-pick-name{font-size:12px;color:var(--muted-soft)}
+.file-pick-name.is-set{color:var(--ink);font-weight:600}
+.file-pick-name.is-bad{color:var(--danger)}
+
+.custom-value-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+
+.btn{appearance:none;border:0;border-radius:999px;padding:9px 16px;font:600 12px var(--font-body);cursor:pointer;transition:background .15s var(--ease),color .15s var(--ease),border-color .15s var(--ease)}
+.btn-primary{background:var(--accent);color:#fff}
+.btn-primary:hover{background:var(--accent-2)}
+.btn-quiet{border:1px solid var(--line);background:#fff;color:var(--ink)}
+.btn-quiet:hover{background:var(--paper-2);border-color:#c6bba7}
+.btn-danger-ghost{padding:6px 10px;font-size:11px;color:var(--danger);border:1px solid transparent}
+.btn-danger-ghost:hover{background:var(--danger-tint);border-color:#e3b7ac}
+
+.form-note{padding:11px 13px;border-radius:var(--r-sm);background:var(--paper-2);color:var(--muted);font-size:11.5px;line-height:1.5}
+.form-note.is-bad{background:var(--danger-tint);color:var(--danger)}
+
+.footer-note{margin-top:16px;color:var(--muted-soft);font-size:11px}
+
+@media(prefers-reduced-motion:reduce){
+    *,*::before,*::after{transition-duration:.01ms !important;animation-duration:.01ms !important}
+}
+
+@media(max-width:640px){
+    .forge-bar-inner{flex-direction:column;align-items:flex-start;gap:12px}
+    .forge-bar-actions{width:100%;justify-content:space-between}
+    .panel-title{font-size:23px}
+    .cred-pair{grid-template-columns:1fr}
+    .custom-value-grid{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+
+<div class="forge-bar">
+    <div class="forge-bar-inner">
+        <div class="brand">
+            <span class="brand-mark">CF</span>
+            <span class="brand-text">
+                <span class="brand-name">Credential Forge</span>
+                <span class="brand-tag">JSON in, Cloudflare secrets out — nothing leaves this tab</span>
+            </span>
+        </div>
+        <div class="forge-bar-actions">
+            <div class="segmented" id="modeSegmented">
+                <span class="segmented-indicator" id="segmentedIndicator"></span>
+                <button class="seg-btn active" data-mode="express" type="button">Express</button>
+                <button class="seg-btn" data-mode="custom" type="button">Custom</button>
+            </div>
+            <button class="reset-btn" id="clearBtn" type="button">Clear all</button>
+        </div>
+    </div>
+</div>
+
+<main class="stage">
+
+    <section id="expressPanel">
+        <div class="panel-head">
+            <h1 class="panel-title">Express setup</h1>
+            <p class="panel-sub">Hard-coded to the six secret names your Worker already expects. Drop in the three service-account files below — OTHER, Plan B and Plan C are identified from the filename.</p>
+        </div>
+
+        <label class="dropzone" id="expressDropzone" for="expressInput">
+            <span class="dropzone-title">Choose or drop the three Firebase files</span>
+            <span class="dropzone-sub">Select all three at once — files are read locally and never uploaded.</span>
+        </label>
+        <input id="expressInput" type="file" accept=".json,application/json" multiple>
+
+        <div class="file-row">
+            <div class="file-pill" id="pill-other">
+                <span class="dot"></span>
+                <span class="file-pill-body">
+                    <span class="file-pill-role">OTHER</span>
+                    <span class="file-pill-name" id="ex-file-other">Waiting for file</span>
+                    <span class="file-pill-note" id="ex-status-other">No file selected</span>
+                </span>
+            </div>
+            <div class="file-pill" id="pill-b">
+                <span class="dot"></span>
+                <span class="file-pill-body">
+                    <span class="file-pill-role">PLAN B</span>
+                    <span class="file-pill-name" id="ex-file-b">Waiting for file</span>
+                    <span class="file-pill-note" id="ex-status-b">No file selected</span>
+                </span>
+            </div>
+            <div class="file-pill" id="pill-c">
+                <span class="dot"></span>
+                <span class="file-pill-body">
+                    <span class="file-pill-role">PLAN C</span>
+                    <span class="file-pill-name" id="ex-file-c">Waiting for file</span>
+                    <span class="file-pill-note" id="ex-status-c">No file selected</span>
+                </span>
+            </div>
+        </div>
+
+        <p class="status" id="expressStatus">Waiting for the three Firebase files.</p>
+
+        <div class="ledger" id="expressCredentials"></div>
+    </section>
+
+    <section id="customPanel" hidden>
+        <div class="panel-head panel-head-row">
+            <div>
+                <h1 class="panel-title">Custom credentials</h1>
+                <p class="panel-sub">Add any number of service-account files and name the Cloudflare variables yourself. Nothing here touches your Worker automatically.</p>
+            </div>
+            <button class="btn btn-primary" id="addCustomBtn" type="button">+ Add credential</button>
+        </div>
+
+        <div class="custom-list" id="customList">
+            <p class="empty" id="customEmpty">No custom credentials yet — add your first one above.</p>
+        </div>
+
+        <p class="footer-note">Variable names you type are remembered in this browser only, so repeat entries are faster to fill in.</p>
+    </section>
+
+</main>
+
+<script>
+"use strict";
+
+const EXPRESS = {
+    other: { label: "OTHER", clientEmail: "OTHERPLAN_CLIENT_EMAIL", privateKey: "OTHERPLAN_PRIVATE_KEY" },
+    b: { label: "PLAN B", clientEmail: "PLANB_CLIENT_EMAIL", privateKey: "PLANB_PRIVATE_KEY" },
+    c: { label: "PLAN C", clientEmail: "PLANC_CLIENT_EMAIL", privateKey: "PLANC_PRIVATE_KEY" }
+};
+
+const expressFiles = { other: null, b: null, c: null };
+const expressData = { other: null, b: null, c: null };
+let customCounter = 0;
+const customEntries = new Map();
+
+const $ = id => document.getElementById(id);
+
+function escapeHtml(value) {
+    return String(value).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#039;");
+}
+
+function identifyRole(filename) {
+    const name = filename.toLowerCase();
+    if (name.includes("other")) return "other";
+    if (/(^|[^a-z])b([^a-z]|$)/i.test(name)) return "b";
+    if (/(^|[^a-z])c([^a-z]|$)/i.test(name)) return "c";
+    if (/b/i.test(name)) return "b";
+    if (/c/i.test(name)) return "c";
+    return null;
+}
+
+function normalizePrivateKey(value) {
+    if (typeof value !== "string") return "";
+    return value.replace(/\\n/g,"\n").replace(/\r\n/g,"\n").replace(/\r/g,"\n").trim();
+}
+
+function parseServiceAccount(text) {
+    let data;
+    try { data = JSON.parse(text); }
+    catch { throw new Error("Invalid JSON file."); }
+
+    if (!data || typeof data !== "object") throw new Error("JSON is not an object.");
+    if (typeof data.client_email !== "string" || !data.client_email.trim()) throw new Error("Missing client_email.");
+    if (typeof data.private_key !== "string" || !data.private_key.trim()) throw new Error("Missing private_key.");
+
+    const privateKey = normalizePrivateKey(data.private_key);
+    if (!privateKey.includes("-----BEGIN PRIVATE KEY-----") || !privateKey.includes("-----END PRIVATE KEY-----")) {
+        throw new Error("private_key does not look like a service-account key.");
+    }
+
+    return { clientEmail: data.client_email.trim(), privateKey };
+}
+
+async function readFile(file) {
+    return parseServiceAccount(await file.text());
+}
+
+/* ---------- copy + reveal (the signature interaction) ---------- */
+
+function wireChipCopy(button, value, kind) {
+    if (!button) return;
+    button.addEventListener("click", async () => {
+        const icon = button.querySelector(".chip-icon");
+        const restore = () => {
+            button.classList.remove("copied");
+            if (icon) icon.textContent = "Copy";
+        };
+        const onSuccess = () => {
+            button.classList.add("copied");
+            if (icon) icon.textContent = "Copied";
+            clearTimeout(button._copyTimer);
+            button._copyTimer = setTimeout(restore, 1300);
+        };
+        try {
+            await navigator.clipboard.writeText(value);
+            onSuccess();
+        } catch {
+            const area = document.createElement("textarea");
+            area.value = value;
+            area.style.position = "fixed";
+            area.style.opacity = "0";
+            document.body.appendChild(area);
+            area.select();
+            try {
+                document.execCommand("copy");
+                onSuccess();
+            } catch {
+                alert(`Copy failed. Please select the ${kind} manually.`);
+            } finally {
+                area.remove();
+            }
+        }
+    });
+}
+
+function maskedLabel(value) {
+    const lines = value.split("\n").length;
+    const chars = value.length.toLocaleString();
+    return `Hidden — ${lines} lines, ${chars} characters. Copy works without revealing.`;
+}
+
+function buildCredPair(container, { name, value, sourceField, isPrivate }) {
+    const block = document.createElement("div");
+    block.className = "cred-block";
+
+    block.innerHTML = `
+        <div class="cred-pair">
+            <button class="chip chip-name" type="button" aria-label="Copy Cloudflare variable name ${escapeHtml(name)}">
+                <span class="chip-main">
+                    <span class="chip-label">Variable name</span>
+                    <span class="chip-text">${escapeHtml(name)}</span>
+                </span>
+                <span class="chip-icon">Copy</span>
+            </button>
+            ${isPrivate ? `
+            <div class="cred-value-wrap">
+                <button class="chip chip-value" type="button" aria-label="Copy value for ${escapeHtml(name)}">
+                    <span class="chip-main">
+                        <span class="chip-label">Value</span>
+                        <span class="chip-text is-masked">${escapeHtml(maskedLabel(value))}</span>
+                    </span>
+                    <span class="chip-icon">Copy</span>
+                </button>
+                <button class="reveal-toggle" type="button">Reveal</button>
+            </div>` : `
+            <button class="chip chip-value" type="button" aria-label="Copy value for ${escapeHtml(name)}">
+                <span class="chip-main">
+                    <span class="chip-label">Value</span>
+                    <span class="chip-text">${escapeHtml(value)}</span>
+                </span>
+                <span class="chip-icon">Copy</span>
+            </button>`}
+        </div>
+        <div class="cred-caption">from <code>${escapeHtml(sourceField)}</code></div>
+    `;
+
+    wireChipCopy(block.querySelector(".chip-name"), name, "variable name");
+    wireChipCopy(block.querySelector(".chip-value"), value, "value");
+
+    if (isPrivate) {
+        const revealBtn = block.querySelector(".reveal-toggle");
+        const textEl = block.querySelector(".chip-value .chip-text");
+        let revealed = false;
+        revealBtn.addEventListener("click", () => {
+            revealed = !revealed;
+            textEl.classList.toggle("is-masked", !revealed);
+            textEl.classList.toggle("is-pem", revealed);
+            textEl.textContent = revealed ? value : maskedLabel(value);
+            revealBtn.textContent = revealed ? "Hide" : "Reveal";
+        });
+    }
+
+    container.appendChild(block);
+}
+
+function emptyState(text) {
+    const div = document.createElement("div");
+    div.className = "empty";
+    div.textContent = text;
+    return div;
+}
+
+/* ---------- express mode ---------- */
+
+function setExpressStatus(message, type = "") {
+    const el = $("expressStatus");
+    el.textContent = message;
+    el.className = "status" + (type ? ` ${type}` : "");
+}
+
+function updateFilePill(role, file, error = "") {
+    const pill = $("pill-" + role);
+    $("ex-file-" + role).textContent = file ? file.name : "Waiting for file";
+    $("ex-status-" + role).textContent = file ? (error || "Looks good") : "No file selected";
+    pill.classList.toggle("is-ok", !!file && !error);
+    pill.classList.toggle("is-bad", !!error);
+}
+
+function renderExpress() {
+    const container = $("expressCredentials");
+    container.innerHTML = "";
+
+    if (!(expressData.other && expressData.b && expressData.c)) {
+        container.appendChild(emptyState("Select valid files for OTHER, Plan B and Plan C to reveal the six Cloudflare secrets."));
+        return;
+    }
+
+    ["other", "b", "c"].forEach(role => {
+        const cfg = EXPRESS[role];
+        const data = expressData[role];
+        const file = expressFiles[role];
+
+        const group = document.createElement("div");
+        group.className = "ledger-group";
+        group.innerHTML = `
+            <div class="ledger-group-head">
+                <h3 class="ledger-group-title">${escapeHtml(cfg.label)}</h3>
+                <span class="ledger-group-file">${escapeHtml(file.name)}</span>
+            </div>
+        `;
+        buildCredPair(group, { name: cfg.clientEmail, value: data.clientEmail, sourceField: "client_email", isPrivate: false });
+        buildCredPair(group, { name: cfg.privateKey, value: data.privateKey, sourceField: "private_key", isPrivate: true });
+        container.appendChild(group);
+    });
+}
+
+async function processExpressFiles(fileList) {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+
+    // Only the roles present in this selection are touched — a later drop of
+    // just one corrected file won't wipe roles that already loaded fine.
+    const errors = [];
+    const seenThisBatch = new Set();
+
+    for (const file of files) {
+        if (!file.name.toLowerCase().endsWith(".json")) {
+            errors.push(`${file.name}: not a JSON file.`);
+            continue;
+        }
+        const role = identifyRole(file.name);
+        if (!role) {
+            errors.push(`${file.name}: could not identify OTHER, B or C from filename.`);
+            continue;
+        }
+        if (seenThisBatch.has(role)) {
+            errors.push(`${file.name}: duplicate ${EXPRESS[role].label} file in this selection.`);
+            continue;
+        }
+        seenThisBatch.add(role);
+        try {
+            const data = await readFile(file);
+            expressFiles[role] = file;
+            expressData[role] = data;
+            updateFilePill(role, file);
+        } catch (error) {
+            expressFiles[role] = file;
+            expressData[role] = null;
+            errors.push(`${file.name}: ${error.message}`);
+            updateFilePill(role, file, error.message);
+        }
+    }
+
+    renderExpress();
+
+    const complete = ["other", "b", "c"].every(role => expressData[role]);
+    if (complete && !errors.length) setExpressStatus("All three projects are valid. Every name and value has its own Copy button.", "good");
+    else if (errors.length) setExpressStatus(errors.join(" "), "bad");
+    else setExpressStatus("Still waiting for valid OTHER, Plan B and Plan C files.");
+}
+
+/* ---------- custom mode ---------- */
+
+const NAME_STORE_KEY = "credentialForge.lastCustomNames";
+
+function loadLastNames() {
+    try {
+        const raw = localStorage.getItem(NAME_STORE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw);
+        if (typeof parsed.emailName === "string" && typeof parsed.keyName === "string") return parsed;
+    } catch { /* private browsing or no storage — skip prefill */ }
+    return null;
+}
+
+function saveLastNames(emailName, keyName) {
+    try { localStorage.setItem(NAME_STORE_KEY, JSON.stringify({ emailName, keyName })); } catch { /* ignore */ }
+}
+
+function addCustomEntry() {
+    const id = ++customCounter;
+    customEntries.set(id, { file: null, data: null, emailName: "", keyName: "" });
+
+    const empty = $("customEmpty");
+    if (empty) empty.remove();
+
+    const card = document.createElement("article");
+    card.className = "custom-card";
+    card.id = `custom-${id}`;
+    card.innerHTML = `
+        <div class="custom-head">
+            <div class="custom-number"><span class="custom-pill">${id}</span> Custom credential</div>
+            <button class="btn btn-danger-ghost" type="button" data-remove="${id}">Remove</button>
+        </div>
+        <div class="custom-body">
+            <div class="field">
+                <label>Service-account JSON</label>
+                <div class="file-pick">
+                    <button class="btn btn-quiet pick-file" type="button">Choose file…</button>
+                    <span class="file-pick-name">No file selected</span>
+                </div>
+                <input class="custom-file-input" type="file" accept=".json,application/json">
+                <div class="field-help">Reads <code>client_email</code> and <code>private_key</code> only, locally.</div>
+            </div>
+
+            <div class="custom-value-grid">
+                <div class="field">
+                    <label>Variable for client_email</label>
+                    <input class="text-input email-name" type="text" spellcheck="false" autocomplete="off" placeholder="e.g. MYAPP_CLIENT_EMAIL">
+                </div>
+                <div class="field">
+                    <label>Variable for private_key</label>
+                    <input class="text-input key-name" type="text" spellcheck="false" autocomplete="off" placeholder="e.g. MYAPP_PRIVATE_KEY">
+                </div>
+            </div>
+
+            <div class="custom-output" hidden></div>
+        </div>
+    `;
+
+    $("customList").appendChild(card);
+
+    const entry = customEntries.get(id);
+    const fileInput = card.querySelector(".custom-file-input");
+    const pick = card.querySelector(".pick-file");
+    const nameDisplay = card.querySelector(".file-pick-name");
+    const helpText = card.querySelector(".field-help");
+    const emailName = card.querySelector(".email-name");
+    const keyName = card.querySelector(".key-name");
+
+    const lastNames = loadLastNames();
+    if (lastNames) {
+        emailName.value = lastNames.emailName;
+        keyName.value = lastNames.keyName;
+        entry.emailName = lastNames.emailName;
+        entry.keyName = lastNames.keyName;
+    }
+
+    pick.addEventListener("click", () => fileInput.click());
+    fileInput.addEventListener("change", async () => {
+        const file = fileInput.files?.[0];
+        if (!file) return;
+        nameDisplay.textContent = file.name;
+        nameDisplay.classList.remove("is-bad");
+        nameDisplay.classList.add("is-set");
+        helpText.textContent = "Reads client_email and private_key only, locally.";
+        helpText.classList.remove("is-bad");
+        try {
+            entry.file = file;
+            entry.data = await readFile(file);
+            showCustomOutput(id);
+        } catch (error) {
+            entry.file = file;
+            entry.data = null;
+            nameDisplay.classList.add("is-bad");
+            helpText.textContent = error.message;
+            helpText.classList.add("is-bad");
+            showCustomOutput(id);
+        }
+    });
+
+    const handleNameInput = () => {
+        entry.emailName = emailName.value.trim();
+        entry.keyName = keyName.value.trim();
+        saveLastNames(entry.emailName, entry.keyName);
+        showCustomOutput(id);
+    };
+    emailName.addEventListener("input", handleNameInput);
+    keyName.addEventListener("input", handleNameInput);
+
+    card.querySelector("[data-remove]").addEventListener("click", () => {
+        customEntries.delete(id);
+        card.remove();
+        if (!customEntries.size) {
+            $("customList").innerHTML = `<p class="empty" id="customEmpty">No custom credentials yet — add your first one above.</p>`;
+        }
+    });
+}
+
+function showCustomOutput(id) {
+    const card = $(`custom-${id}`);
+    const entry = customEntries.get(id);
+    if (!card || !entry) return;
+    const output = card.querySelector(".custom-output");
+
+    if (!entry.data) {
+        output.hidden = true;
+        output.innerHTML = "";
+        return;
+    }
+
+    if (!entry.emailName || !entry.keyName) {
+        output.hidden = false;
+        output.innerHTML = `<p class="form-note">Enter both Cloudflare variable names above to reveal the two values.</p>`;
+        return;
+    }
+
+    output.hidden = false;
+    output.innerHTML = "";
+    const group = document.createElement("div");
+    group.className = "ledger-group";
+    buildCredPair(group, { name: entry.emailName, value: entry.data.clientEmail, sourceField: "client_email", isPrivate: false });
+    buildCredPair(group, { name: entry.keyName, value: entry.data.privateKey, sourceField: "private_key", isPrivate: true });
+    output.appendChild(group);
+}
+
+/* ---------- mode switch ---------- */
+
+function positionIndicator() {
+    const active = document.querySelector(".seg-btn.active");
+    const indicator = $("segmentedIndicator");
+    if (!active || !indicator) return;
+    indicator.style.width = active.offsetWidth + "px";
+    indicator.style.transform = `translateX(${active.offsetLeft}px)`;
+}
+
+function switchMode(mode) {
+    document.querySelectorAll(".seg-btn").forEach(btn => btn.classList.toggle("active", btn.dataset.mode === mode));
+    $("expressPanel").hidden = mode !== "express";
+    $("customPanel").hidden = mode !== "custom";
+    positionIndicator();
+}
+
+document.querySelectorAll(".seg-btn").forEach(btn => {
+    btn.addEventListener("click", () => switchMode(btn.dataset.mode));
+});
+
+let resizeRaf;
+window.addEventListener("resize", () => {
+    cancelAnimationFrame(resizeRaf);
+    resizeRaf = requestAnimationFrame(positionIndicator);
+});
+
+/* ---------- wiring ---------- */
+
+$("addCustomBtn").addEventListener("click", addCustomEntry);
+
+$("expressInput").addEventListener("change", e => processExpressFiles(e.target.files));
+
+for (const eventName of ["dragenter", "dragover"]) {
+    $("expressDropzone").addEventListener(eventName, event => {
+        event.preventDefault();
+        $("expressDropzone").classList.add("dragover");
+    });
+}
+for (const eventName of ["dragleave", "drop"]) {
+    $("expressDropzone").addEventListener(eventName, event => {
+        event.preventDefault();
+        $("expressDropzone").classList.remove("dragover");
+    });
+}
+$("expressDropzone").addEventListener("drop", event => processExpressFiles(event.dataTransfer.files));
+
+$("clearBtn").addEventListener("click", () => {
+    if (!confirm("Clear all entered data? This can't be undone.")) return;
+    $("expressInput").value = "";
+    ["other", "b", "c"].forEach(role => {
+        expressFiles[role] = null;
+        expressData[role] = null;
+        updateFilePill(role, null);
+    });
+    renderExpress();
+    setExpressStatus("Waiting for the three Firebase files.");
+    customEntries.clear();
+    customCounter = 0;
+    $("customList").innerHTML = `<p class="empty" id="customEmpty">No custom credentials yet — add your first one above.</p>`;
+});
+
+renderExpress();
+positionIndicator();
+</script>
+</body>
+</html>
